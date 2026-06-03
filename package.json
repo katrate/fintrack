@@ -61,14 +61,6 @@
       ],
       "icon": "public/logo.png",
       "category": "public.app-category.finance"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "icon": "public/logo.png",
-      "category": "Finance"
     }
   }
 }

@@ -1,10 +1,12 @@
 export function Downloads() {
+  const RELEASES_URL = 'https://github.com/katrate/fintrack/releases/latest'
+
   return (
     <section className="downloads" id="downloads">
       <div className="container">
         <div className="section-header">
           <h2>Download FinTrack</h2>
-          <p>Free and open source. Available for all major platforms.</p>
+          <p>Free and open source. Available for Windows and macOS.</p>
         </div>
         <div className="downloads-grid">
           <div className="download-card">
@@ -14,8 +16,8 @@ export function Downloads() {
               </svg>
             </div>
             <h3>Windows</h3>
-            <p>Installer for Windows 10/11 (64-bit)</p>
-            <a href="#" className="btn btn-primary" onClick={(e) => { e.preventDefault(); alert('Download will be available after the first GitHub release.') }}>
+            <p>Installer (.exe) & MSI package for Windows 10/11</p>
+            <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               Download for Windows
             </a>
@@ -28,24 +30,10 @@ export function Downloads() {
               </svg>
             </div>
             <h3>macOS</h3>
-            <p>Native app for Intel & Apple Silicon</p>
-            <a href="#" className="btn btn-primary" onClick={(e) => { e.preventDefault(); alert('Download will be available after the first GitHub release.') }}>
+            <p>Native app (.dmg) & zip for Apple Silicon & Intel</p>
+            <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               Download for macOS
-            </a>
-          </div>
-
-          <div className="download-card">
-            <div className="platform-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-              </svg>
-            </div>
-            <h3>Linux</h3>
-            <p>AppImage & deb for all distros</p>
-            <a href="#" className="btn btn-primary" onClick={(e) => { e.preventDefault(); alert('Download will be available after the first GitHub release.') }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-              Download for Linux
             </a>
           </div>
         </div>
