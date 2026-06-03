@@ -294,18 +294,10 @@ body {
 
 .downloads-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 24px;
-  margin-top: 40px;
-}
-
-.download-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 32px;
-  text-align: center;
-  transition: all 0.3s;
+  margin: 40px auto 0;
+  max-width: 800px;
 }
 
 .download-card:hover {
