@@ -51,7 +51,6 @@
     },
     "mac": {
       "target": [
-        "dmg",
         "zip"
       ],
       "icon": "public/logo.png",
