@@ -33,11 +33,6 @@
   "build": {
     "appId": "com.fintrack.app",
     "productName": "FinTrack",
-    "publish": {
-      "provider": "github",
-      "owner": "katrate",
-      "repo": "fintrack"
-    },
     "directories": {
       "output": "release"
     },
