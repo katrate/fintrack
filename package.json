@@ -1,0 +1,74 @@
+{
+  "name": "fintrack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Professional Finance Tracker - Electron + React",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "electron:dev": "concurrently \"cross-env VITE_DEV_SERVER_URL=http://localhost:3000 wait-on http://localhost:3000 && electron .\" \"vite\"",
+    "electron:build": "npm run build && electron-builder",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
+    "electron-updater": "^6.8.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts": "^3.8.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^9.0.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.fintrack.app",
+    "productName": "FinTrack",
+    "publish": {
+      "provider": "github",
+      "owner": "katrate",
+      "repo": "fintrack"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "msi"
+      ],
+      "icon": "public/logo.png",
+      "signAndEditExecutable": false,
+      "artifactName": "FinTrack-${version}-${os}-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "public/logo.png",
+      "category": "public.app-category.finance"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "public/logo.png",
+      "category": "Finance"
+    }
+  }
+}
