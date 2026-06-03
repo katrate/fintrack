@@ -1,6 +1,6 @@
 {
   "name": "fintrack",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Professional Finance Tracker - Electron + React",
   "main": "electron/main.js",
