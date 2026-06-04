@@ -61,12 +61,7 @@ if (!isDev) {
 
 app.whenReady().then(() => {
   createWindow()
-
-  if (!isDev) {
-    setTimeout(() => {
-      autoUpdater.checkForUpdates().catch(() => {})
-    }, 5000)
-  }
+  // Update check is triggered by the renderer via IPC after UpdateGate mounts
 })
 
 app.on('window-all-closed', () => {

@@ -4,6 +4,201 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { supabase } from './supabase'
 import { getDaysInMonth, getMonthLabel, formatCurrency, FinanceState, FinanceAction } from './types'
 
+/* ── Theme ── */
+
+type ThemeMode = 'dark' | 'light'
+type AccentColor = 'green' | 'blue' | 'purple' | 'orange'
+
+const ACCENT_MAP: Record<AccentColor, { primary: string; hover?: string }> = {
+  green: { primary: '#00d4aa' },
+  blue: { primary: '#4a90d9' },
+  purple: { primary: '#8b5cf6' },
+  orange: { primary: '#f59e0b' },
+}
+
+interface AppSettings {
+  theme: ThemeMode
+  accent: AccentColor
+}
+
+const DEFAULT_SETTINGS: AppSettings = { theme: 'dark', accent: 'green' }
+
+function loadSettings(): AppSettings {
+  try {
+    const raw = localStorage.getItem('fintrack-settings')
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+  } catch {}
+  return DEFAULT_SETTINGS
+}
+
+function saveSettings(s: AppSettings) {
+  localStorage.setItem('fintrack-settings', JSON.stringify(s))
+}
+
+function applyTheme(s: AppSettings) {
+  document.documentElement.setAttribute('data-theme', s.theme)
+  document.documentElement.setAttribute('data-accent', s.accent)
+}
+
+/* ── Update Gate ── */
+
+type UpdateStatus = 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+
+function UpdateGate({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<UpdateStatus>('checking')
+  const [updateInfo, setUpdateInfo] = useState<any>(null)
+  const [progress, setProgress] = useState(0)
+  const [errorMsg, setErrorMsg] = useState('')
+  const skippedRef = useRef(false)
+  const isElectron = typeof window.electronAPI?.platform === 'string'
+
+  useEffect(() => {
+    if (!isElectron) {
+      setStatus('not-available')
+      return
+    }
+
+    let cancelled = false
+
+    const unsub1 = window.electronAPI!.onUpdateChecking(() => {
+      if (!cancelled) setStatus('checking')
+    })
+
+    const unsub2 = window.electronAPI!.onUpdateAvailable((info: any) => {
+      if (!cancelled && !skippedRef.current) {
+        setUpdateInfo(info)
+        setStatus('available')
+      }
+    })
+
+    const unsub3 = window.electronAPI!.onUpdateNotAvailable(() => {
+      if (!cancelled) setStatus('not-available')
+    })
+
+    const unsub4 = window.electronAPI!.onUpdateDownloadProgress((p: any) => {
+      if (!cancelled) {
+        setProgress(p.percent || 0)
+        setStatus('downloading')
+      }
+    })
+
+    const unsub5 = window.electronAPI!.onUpdateDownloaded((info: any) => {
+      if (!cancelled) {
+        setUpdateInfo(info)
+        setStatus('downloaded')
+      }
+    })
+
+    const unsub6 = window.electronAPI!.onUpdateError((err: string) => {
+      if (!cancelled) {
+        setErrorMsg(err)
+        setStatus('error')
+      }
+    })
+
+    // Trigger check after listeners are registered
+    window.electronAPI!.checkForUpdates()
+
+    return () => {
+      cancelled = true
+      unsub1?.()
+      unsub2?.()
+      unsub3?.()
+      unsub4?.()
+      unsub5?.()
+      unsub6?.()
+    }
+  }, [isElectron])
+
+  const handleDownload = async () => {
+    if (window.electronAPI?.downloadUpdate) {
+      await window.electronAPI.downloadUpdate()
+    }
+  }
+
+  const handleInstall = async () => {
+    if (window.electronAPI?.installUpdate) {
+      await window.electronAPI.installUpdate()
+    }
+  }
+
+  const handleSkip = () => {
+    skippedRef.current = true
+    setStatus('not-available')
+  }
+
+  if (status === 'not-available' || (!isElectron && status === 'checking')) {
+    return <>{children}</>
+  }
+
+  return (
+    <div className="update-gate">
+      <div className="ug-card">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" />
+          <line x1="8" y1="21" x2="16" y2="21" />
+          <line x1="12" y1="17" x2="12" y2="21" />
+        </svg>
+        <h1>FinTrack</h1>
+
+        {status === 'checking' && (
+          <>
+            <p className="ug-status">Checking for updates...</p>
+            <div className="auth-loading-spinner" />
+          </>
+        )}
+
+        {status === 'available' && (
+          <>
+            <p className="ug-status">Update Available</p>
+            <p className="ug-version">v{updateInfo?.version || '?'}</p>
+            <button className="ug-btn ug-btn-primary" onClick={handleDownload}>
+              Download Update
+            </button>
+            <button className="ug-btn ug-btn-ghost" onClick={handleSkip}>
+              Continue without updating
+            </button>
+          </>
+        )}
+
+        {status === 'downloading' && (
+          <>
+            <p className="ug-status">Downloading update...</p>
+            <div className="ug-progress-track">
+              <div className="ug-progress-fill" style={{ width: `${Math.min(progress, 100)}%` }} />
+            </div>
+            <p className="ug-percent">{Math.round(progress)}%</p>
+          </>
+        )}
+
+        {status === 'downloaded' && (
+          <>
+            <p className="ug-status">Update Downloaded</p>
+            <p className="ug-version">Restart to install v{updateInfo?.version || '?'}</p>
+            <button className="ug-btn ug-btn-primary" onClick={handleInstall}>
+              Restart & Install
+            </button>
+            <button className="ug-btn ug-btn-ghost" onClick={handleSkip}>
+              Later
+            </button>
+          </>
+        )}
+
+        {status === 'error' && (
+          <>
+            <p className="ug-status ug-status-error">Update check failed</p>
+            <p className="ug-version" style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{errorMsg}</p>
+            <button className="ug-btn ug-btn-primary" onClick={handleSkip}>
+              Continue
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
 function TitleBar() {
   const isElectron = typeof window.electronAPI?.platform === 'string'
   const [maximized, setMaximized] = useState(false)
@@ -697,9 +892,84 @@ function AuthModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+/* ── Settings Modal ── */
+
+function SettingsModal({ onClose }: { onClose: () => void }) {
+  const [settings, setSettings] = useState<AppSettings>(loadSettings)
+
+  const update = (partial: Partial<AppSettings>) => {
+    const next = { ...settings, ...partial }
+    setSettings(next)
+    saveSettings(next)
+    applyTheme(next)
+  }
+
+  const themes: { value: ThemeMode; label: string; icon: string }[] = [
+    { value: 'dark', label: 'Dark', icon: '🌙' },
+    { value: 'light', label: 'Light', icon: '☀️' },
+  ]
+
+  const accents: { value: AccentColor; label: string }[] = [
+    { value: 'green', label: 'Green' },
+    { value: 'blue', label: 'Blue' },
+    { value: 'purple', label: 'Purple' },
+    { value: 'orange', label: 'Orange' },
+  ]
+
+  return (
+    <div className="auth-overlay" onClick={onClose}>
+      <div className="settings-modal" onClick={e => e.stopPropagation()}>
+        <button className="auth-close" onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        <h2>Appearance</h2>
+        <p className="auth-sub">Customize your experience</p>
+
+        <div className="st-section">
+          <label className="st-label">Theme</label>
+          <div className="st-row">
+            {themes.map(t => (
+              <button
+                key={t.value}
+                className={`st-chip ${settings.theme === t.value ? 'st-chip-active' : ''}`}
+                onClick={() => update({ theme: t.value })}
+              >
+                <span>{t.icon}</span> {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="st-section">
+          <label className="st-label">Accent Color</label>
+          <div className="st-row">
+            {accents.map(a => (
+              <button
+                key={a.value}
+                className={`st-chip ${settings.accent === a.value ? 'st-chip-active' : ''}`}
+                onClick={() => update({ accent: a.value })}
+                style={{
+                  '--chip-color': ACCENT_MAP[a.value].primary,
+                  borderColor: settings.accent === a.value ? ACCENT_MAP[a.value].primary : undefined,
+                } as React.CSSProperties}
+              >
+                <span className="st-dot" style={{ background: ACCENT_MAP[a.value].primary }} />
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function UserSection({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
   const { user, signOut } = useAuth()
   const [showAuth, setShowAuth] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   if (!user) {
     return (
@@ -719,23 +989,34 @@ function UserSection({ onToast }: { onToast: (msg: string, type: 'success' | 'er
   }
 
   return (
-    <div className="user-section">
-      <div className="user-info">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-        <span className="user-email" title={user.email || ''}>
-          {user.email?.split('@')[0] || 'User'}
-        </span>
+    <>
+      <div className="user-section">
+        <div className="user-info">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span className="user-email" title={user.email || ''}>
+            {user.email?.split('@')[0] || 'User'}
+          </span>
+        </div>
+        <div className="user-actions">
+          <button className="user-btn-icon" onClick={() => setShowSettings(true)} title="Settings">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+          <button className="user-btn user-logout" onClick={() => {
+            signOut()
+            onToast('Signed out', 'success')
+          }}>
+            Sign Out
+          </button>
+        </div>
       </div>
-      <button className="user-btn user-logout" onClick={() => {
-        signOut()
-        onToast('Signed out', 'success')
-      }}>
-        Sign Out
-      </button>
-    </div>
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+    </>
   )
 }
 
@@ -940,6 +1221,12 @@ function AuthGate({ children }: { children: ReactNode }) {
 export default function App() {
   const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' }[]>([])
 
+  // Apply saved theme on mount
+  useEffect(() => {
+    const s = loadSettings()
+    applyTheme(s)
+  }, [])
+
   const addToast = useCallback((message: string, type: 'success' | 'error') => {
     const id = ++toastId
     setToasts(prev => [...prev, { id, message, type }])
@@ -951,14 +1238,16 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <AuthGate>
-        <TitleBar />
-        <FinanceProvider>
-          <CloudSync addToast={addToast}>
-            <AppLayout onToast={addToast} />
-          </CloudSync>
-        </FinanceProvider>
-      </AuthGate>
+      <UpdateGate>
+        <AuthGate>
+          <TitleBar />
+          <FinanceProvider>
+            <CloudSync addToast={addToast}>
+              <AppLayout onToast={addToast} />
+            </CloudSync>
+          </FinanceProvider>
+        </AuthGate>
+      </UpdateGate>
       <div className="toast-container">
         {toasts.map(t => (
           <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
