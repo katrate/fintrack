@@ -2,17 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, ReactNode } from 'reac
 import { FinanceProvider, useFinance, createDefaultState } from './context/FinanceContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { supabase } from './supabase'
-import { getDaysInMonth, getMonthLabel, formatCurrency, FinanceState } from './types'
-
-function generateMonthOptions(): string[] {
-  const options: string[] = []
-  const now = new Date()
-  for (let i = -12; i <= 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
-    options.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-  }
-  return options
-}
+import { getDaysInMonth, getMonthLabel, formatCurrency, FinanceState, FinanceAction } from './types'
 
 function TitleBar() {
   const isElectron = typeof window.electronAPI?.platform === 'string'
@@ -59,37 +49,105 @@ function TitleBar() {
   )
 }
 
-function MonthSelector() {
+function MonthSidebarList() {
   const { state, dispatch } = useFinance()
-  const months = generateMonthOptions()
+  const [newMonth, setNewMonth] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const addInputRef = useRef<HTMLInputElement>(null)
+
+  const monthKeys = Object.keys(state.months).sort()
+
+  const handleAddMonth = () => {
+    const trimmed = newMonth.trim()
+    if (!trimmed) return
+    // Validate YYYY-MM format
+    if (!/^\d{4}-\d{2}$/.test(trimmed)) return
+    dispatch({ type: 'ADD_MONTH', payload: trimmed })
+    setNewMonth('')
+    setShowAdd(false)
+  }
+
+  useEffect(() => {
+    if (showAdd && addInputRef.current) {
+      addInputRef.current.focus()
+    }
+  }, [showAdd])
 
   return (
-    <div className="month-selector">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-        <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-        <line x1="3" y1="10" x2="21" y2="10" />
-      </svg>
-      <select
-        value={state.selectedMonth}
-        onChange={e => dispatch({ type: 'SET_MONTH', payload: e.target.value })}
-        className="month-select"
-      >
-        {months.map(m => (
-          <option key={m} value={m}>{getMonthLabel(m)}</option>
-        ))}
-      </select>
+    <div className="month-sidebar">
+      <div className="ms-header">
+        <span className="ms-title">Months</span>
+        <button
+          className="ms-add-btn"
+          onClick={() => setShowAdd(true)}
+          title="Add month"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="ms-add-row">
+          <input
+            ref={addInputRef}
+            type="text"
+            className="ms-input"
+            placeholder="YYYY-MM"
+            value={newMonth}
+            onChange={e => setNewMonth(e.target.value)}
+            onBlur={handleAddMonth}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleAddMonth()
+              if (e.key === 'Escape') { setShowAdd(false); setNewMonth('') }
+            }}
+          />
+        </div>
+      )}
+
+      <div className="ms-list">
+        {monthKeys.map(m => {
+          const isActive = m === state.selectedMonth
+          const [y, monthNum] = m.split('-')
+          const label = `${new Date(Number(y), Number(monthNum) - 1).toLocaleString('default', { month: 'short' })} ${y}`
+          return (
+            <div
+              key={m}
+              className={`ms-item ${isActive ? 'ms-item-active' : ''}`}
+            >
+              <button className="ms-item-main" onClick={() => !isActive && dispatch({ type: 'SET_MONTH', payload: m })}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span className="ms-label">{label}</span>
+                {isActive && <span className="ms-dot" />}
+              </button>
+              <button
+                className="ms-del-btn"
+                onClick={() => dispatch({ type: 'DELETE_MONTH', payload: m })}
+                title="Delete month"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
 
 function SummaryCards() {
-  const { state, dispatch, totalSpent, moneyLeft } = useFinance()
+  const { state, dispatch, totalSpent, moneyLeft, currentData } = useFinance()
 
   const cards = [
-    { label: 'Opening Balance', value: state.openingBalance, icon: 'wallet', color: '#4a90d9' },
-    { label: 'Monthly Income', value: state.monthlyIncome, icon: 'income', color: '#00d4aa' },
-    { label: 'Extra Gains', value: state.extraGains, icon: 'gift', color: '#f59e0b' },
+    { label: 'Opening Balance', value: currentData.openingBalance, icon: 'wallet', color: '#4a90d9' },
+    { label: 'Extra Gains', value: currentData.extraGainsTotal, icon: 'gift', color: '#f59e0b' },
     { label: 'Total Spent', value: totalSpent, icon: 'spent', color: '#ef4444' },
     { label: 'Money Left', value: moneyLeft, icon: 'left', color: moneyLeft >= 0 ? '#00d4aa' : '#ef4444' },
   ]
@@ -131,15 +189,21 @@ function SummaryCards() {
           </div>
           <div className="sc-label">{card.label}</div>
           <div className="sc-value" style={{ color: card.color }}>
-            <EditableNumber
-              value={card.value}
-              onChange={v => {
-                if (card.label === 'Opening Balance') dispatch({ type: 'SET_OPENING_BALANCE', payload: v })
-                if (card.label === 'Monthly Income') dispatch({ type: 'SET_MONTHLY_INCOME', payload: v })
-                if (card.label === 'Extra Gains') dispatch({ type: 'SET_EXTRA_GAINS', payload: v })
-              }}
-              readonly={card.label === 'Total Spent' || card.label === 'Money Left'}
-            />
+            {card.label === 'Extra Gains' ? (
+              <ExtraGainsEditor
+                total={currentData.extraGainsTotal}
+                log={currentData.extraGainsLog}
+                dispatch={dispatch}
+              />
+            ) : (
+              <EditableNumber
+                value={card.value}
+                onChange={v => {
+                  if (card.label === 'Opening Balance') dispatch({ type: 'SET_OPENING_BALANCE', payload: v })
+                }}
+                readonly={card.label === 'Total Spent' || card.label === 'Money Left'}
+              />
+            )}
           </div>
         </div>
       ))}
@@ -257,6 +321,78 @@ function EditableCell({ value, onChange }: {
   )
 }
 
+function ExtraGainsEditor({ total, log, dispatch }: {
+  total: number
+  log: number[]
+  dispatch: React.Dispatch<FinanceAction>
+}) {
+  const [adding, setAdding] = useState(false)
+  const [text, setText] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const hasHistory = log.length > 0
+
+  const handleStart = () => {
+    setText('')
+    setAdding(true)
+  }
+
+  useEffect(() => {
+    if (adding && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [adding])
+
+  const handleAdd = () => {
+    const parsed = parseFloat(text)
+    if (!isNaN(parsed) && parsed > 0) {
+      dispatch({ type: 'ADD_EXTRA_GAIN', payload: parsed })
+    }
+    setAdding(false)
+    setText('')
+  }
+
+  const handleUndo = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    dispatch({ type: 'UNDO_EXTRA_GAIN' })
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleAdd()
+    if (e.key === 'Escape') { setAdding(false); setText('') }
+  }
+
+  return (
+    <div className="extra-gains-editor" onClick={!adding ? handleStart : undefined}>
+      {adding ? (
+        <input
+          ref={inputRef}
+          type="number"
+          step="0.01"
+          className="editable-input eg-input"
+          value={text}
+          placeholder="Add amount..."
+          onChange={e => setText(e.target.value)}
+          onBlur={handleAdd}
+          onKeyDown={handleKeyDown}
+        />
+      ) : (
+        <>
+          <span className="editable-value">{formatCurrency(total)}</span>
+          {hasHistory && (
+            <button className="eg-undo" onClick={handleUndo} title="Undo last extra gain">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function CategoriesManager({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
   const { state, dispatch } = useFinance()
   const [newCat, setNewCat] = useState('')
@@ -351,7 +487,7 @@ function CategoriesManager({ onToast }: { onToast: (msg: string, type: 'success'
 }
 
 function FinanceTable() {
-  const { state, dispatch, categoryTotals, dailyTotals, totalSpent } = useFinance()
+  const { state, dispatch, categoryTotals, dailyTotals, totalSpent, currentData } = useFinance()
   const days = getDaysInMonth(state.selectedMonth)
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -387,7 +523,7 @@ function FinanceTable() {
           <tbody>
             {Array.from({ length: days }, (_, i) => i + 1).map(d => {
               const dayKey = String(d)
-              const dayData = state.entries[dayKey] || {}
+              const dayData = currentData.entries[dayKey] || {}
               const weekend = isWeekend(d)
               const today = new Date()
               const [y, m] = state.selectedMonth.split('-').map(Number)
@@ -415,7 +551,7 @@ function FinanceTable() {
               <td className="td-date td-total-label" colSpan={2}>Total</td>
               {state.categories.map(cat => {
                 const total = categoryTotals[cat] || 0
-                const budget = state.budgets[cat]
+                const budget = currentData.budgets[cat]
                 const overBudget = budget && total > budget
                 return (
                   <td key={cat} className={`td-cell ${overBudget ? 'cell-over-budget' : ''}`}>
@@ -432,58 +568,12 @@ function FinanceTable() {
   )
 }
 
-function BudgetManager() {
-  const { state, dispatch, categoryTotals } = useFinance()
 
-  return (
-    <div className="budget-section">
-      <h3>Category Budgets</h3>
-      <div className="budget-grid">
-        {state.categories.map(cat => {
-          const spent = categoryTotals[cat] || 0
-          const budget = state.budgets[cat] || 0
-          const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0
-          const overBudget = budget > 0 && spent > budget
-
-          return (
-            <div key={cat} className={`budget-item ${overBudget ? 'over-budget' : ''}`}>
-              <div className="bi-header">
-                <span className="bi-name">{cat}</span>
-                <span className="bi-spent">{formatCurrency(spent)}</span>
-                <span className="bi-sep">/</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="bi-input"
-                  value={budget || ''}
-                  onChange={e => dispatch({
-                    type: 'SET_BUDGET',
-                    payload: { category: cat, value: parseFloat(e.target.value) || 0 }
-                  })}
-                  placeholder="Budget"
-                />
-              </div>
-              {budget > 0 && (
-                <div className="bi-bar-track">
-                  <div
-                    className={`bi-bar-fill ${overBudget ? 'bar-over' : pct > 80 ? 'bar-warn' : ''}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              )}
-              {overBudget && <div className="bi-alert">Over budget by {formatCurrency(spent - budget)}</div>}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 function SavingsGoal() {
-  const { state, dispatch } = useFinance()
-  const target = state.savingsTarget
-  const current = state.savingsCurrent
+  const { state, dispatch, currentData } = useFinance()
+  const target = currentData.savingsTarget
+  const current = currentData.savingsCurrent
   const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0
 
   return (
@@ -650,7 +740,7 @@ function UserSection({ onToast }: { onToast: (msg: string, type: 'success' | 'er
 }
 
 function CashReconciliation() {
-  const { state, dispatch, moneyLeft, difference } = useFinance()
+  const { state, dispatch, moneyLeft, difference, currentData } = useFinance()
 
   return (
     <div className="reconciliation-section">
@@ -666,7 +756,7 @@ function CashReconciliation() {
             type="number"
             step="0.01"
             className="rec-input"
-            value={state.cashInHand || ''}
+            value={currentData.cashInHand || ''}
             onChange={e => dispatch({ type: 'SET_CASH_IN_HAND', payload: parseFloat(e.target.value) || 0 })}
             placeholder="$0"
           />
@@ -709,66 +799,7 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
   )
 }
 
-function DataControls() {
-  const { state, loadState } = useFinance()
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleExport = () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `fintrack-${state.selectedMonth}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string)
-        loadState(data)
-      } catch { alert('Invalid file') }
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
-
-  const handleReset = () => {
-    if (confirm('Reset all data for this session?')) {
-      window.location.reload()
-    }
-  }
-
-  return (
-    <div className="data-controls">
-      <button className="dc-btn dc-export" onClick={handleExport}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-        Export
-      </button>
-      <button className="dc-btn dc-import" onClick={() => fileInputRef.current?.click()}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-        </svg>
-        Import
-      </button>
-      <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
-      <button className="dc-btn dc-reset" onClick={handleReset}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-        </svg>
-        Reset
-      </button>
-    </div>
-  )
-}
 
 function MainHeader() {
   const { state } = useFinance()
@@ -794,11 +825,9 @@ function AppLayout({ onToast }: { onToast: (msg: string, type: 'success' | 'erro
             <span className="sidebar-sub">Finance Tracker</span>
           </div>
         </div>
-        <MonthSelector />
+        <MonthSidebarList />
         <SavingsGoal />
-        <BudgetManager />
         <UserSection onToast={onToast} />
-        <DataControls />
       </aside>
       <main className="main-content">
         <MainHeader />
