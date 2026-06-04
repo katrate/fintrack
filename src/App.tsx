@@ -244,6 +244,14 @@ function TitleBar() {
   )
 }
 
+function getMonthTotalSpent(entries: Record<string, Record<string, number>>): number {
+  let total = 0
+  for (const dayData of Object.values(entries)) {
+    total += Object.values(dayData).reduce((s, v) => s + v, 0)
+  }
+  return total
+}
+
 function MonthSidebarList() {
   const { state, dispatch } = useFinance()
   const [newMonth, setNewMonth] = useState('')
@@ -318,6 +326,9 @@ function MonthSidebarList() {
                   <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
                 <span className="ms-label">{label}</span>
+                <span className="ms-spent">
+                  {formatCurrency(getMonthTotalSpent(state.months[m]?.entries || {}))}
+                </span>
                 {isActive && <span className="ms-dot" />}
               </button>
               <button

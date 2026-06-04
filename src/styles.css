@@ -424,6 +424,23 @@ body {
   white-space: nowrap;
 }
 
+.ms-spent {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 4px;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+
+.ms-item:hover .ms-spent {
+  color: var(--accent-green);
+}
+
+.ms-item-active .ms-spent {
+  color: var(--accent-green) !important;
+}
+
 .ms-dot {
   width: 5px;
   height: 5px;
