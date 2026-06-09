@@ -1,14 +1,20 @@
 export function Hero() {
   return (
-    <section className="hero">
+    <section className="hero" id="hero">
       <div className="container">
         <div className="hero-badge">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-          Open Source Finance Tracker
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Open Source & Free
         </div>
-        <h1>Take Control of<br />Your Finances</h1>
-        <p>
-          A beautiful, private, and powerful desktop app to track your income, expenses, and savings goals. No spreadsheets, no subscriptions.
+        <h1>
+          Take Control of<br />
+          <span className="gradient-text">Your Finances</span>
+        </h1>
+        <p className="hero-sub">
+          FinTrack is a powerful, privacy-first personal finance tracker. Track expenses,
+          set savings goals, reconcile your cash, and stay on top of your money — all offline.
         </p>
         <div className="hero-actions">
           <a href="#downloads" className="btn btn-primary">
@@ -20,8 +26,17 @@ export function Hero() {
             View on GitHub
           </a>
         </div>
+
         <div className="hero-screenshot">
-          <img src="/screenshots/app-overview.png" alt="FinTrack App Screenshot" />
+          <div className="window-frame">
+            <div className="window-bar">
+              <div className="window-dot red"></div>
+              <div className="window-dot yellow"></div>
+              <div className="window-dot green"></div>
+              <span>FinTrack Dashboard</span>
+            </div>
+            <img src="/screenshots/main-workspace.png" alt="FinTrack App Screenshot" />
+          </div>
         </div>
       </div>
     </section>

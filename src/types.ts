@@ -7,6 +7,8 @@ export interface MonthData {
   budgets: Record<string, number>
   savingsTarget: number
   savingsCurrent: number
+  columnSeparators: string[]
+  highlightedColumns: string[]
 }
 
 export interface FinanceState {
@@ -25,6 +27,8 @@ export function createEmptyMonth(): MonthData {
     budgets: {},
     savingsTarget: 0,
     savingsCurrent: 0,
+    columnSeparators: [],
+    highlightedColumns: [],
   }
 }
 
@@ -43,6 +47,8 @@ export type FinanceAction =
   | { type: 'SET_BUDGET'; payload: { category: string; value: number } }
   | { type: 'SET_SAVINGS_TARGET'; payload: number }
   | { type: 'SET_SAVINGS_CURRENT'; payload: number }
+  | { type: 'TOGGLE_COLUMN_SEPARATOR'; payload: string }
+  | { type: 'TOGGLE_COLUMN_HIGHLIGHT'; payload: string }
   | { type: 'LOAD_STATE'; payload: FinanceState }
 
 export function getDaysInMonth(month: string): number {

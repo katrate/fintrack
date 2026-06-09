@@ -12,6 +12,7 @@ const DOWNLOADS = {
     files: [
       { name: "Installer (.exe)", url: `https://github.com/katrate/fintrack/releases/download/v${version}/FinTrack-${version}-win-x64.exe` },
       { name: "MSI Package", url: `https://github.com/katrate/fintrack/releases/download/v${version}/FinTrack-${version}-win-x64.msi` },
+      { name: "Portable (.zip)", url: `https://github.com/katrate/fintrack/releases/download/v${version}/FinTrack-${version}-win-x64.zip` },
     ],
   },
   macos: {
@@ -30,7 +31,7 @@ export function Downloads() {
       <div className="container">
         <div className="section-header">
           <h2>Download FinTrack</h2>
-          <p>Available for Windows and macOS. Download the latest version and get started.</p>
+          <p>Available for Windows and macOS. Get the latest version and start tracking your finances today.</p>
         </div>
 
         <div className="downloads-grid">
@@ -38,11 +39,11 @@ export function Downloads() {
             <div className="download-card" key={key}>
               <div className="platform-icon" dangerouslySetInnerHTML={{ __html: platform.icon }} />
               <h3>{platform.label}</h3>
-              <p>Version {version}</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <p className="download-version">Version {version}</p>
+              <div className="download-links">
                 {platform.files.map((file) => (
-                  <a key={file.name} href={file.url} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <a key={file.name} href={file.url} className="btn btn-primary">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                     </svg>
                     {file.name}
@@ -53,14 +54,15 @@ export function Downloads() {
           ))}
         </div>
 
-        <p style={{ textAlign: "center", marginTop: "32px", color: "var(--text-muted)", fontSize: "13px" }}>
+        <p className="downloads-footer">
           All downloads are from{' '}
-          <a href="https://github.com/katrate/fintrack/releases" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+          <a href="https://github.com/katrate/fintrack/releases" target="_blank" rel="noopener noreferrer">
             GitHub Releases
           </a>
           . Source code is available on{' '}
-          <a href="https://github.com/katrate/fintrack" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
-            GitHub</a>.
+          <a href="https://github.com/katrate/fintrack" target="_blank" rel="noopener noreferrer">
+            GitHub
+          </a>.
         </p>
       </div>
     </section>

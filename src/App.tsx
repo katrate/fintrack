@@ -1,8 +1,84 @@
-import React, { useRef, useState, useEffect, useCallback, ReactNode } from 'react'
+import React, { useRef, useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react'
 import { FinanceProvider, useFinance, createDefaultState } from './context/FinanceContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { supabase } from './supabase'
 import { getDaysInMonth, getMonthLabel, formatCurrency, FinanceState, FinanceAction } from './types'
+
+/* ── Math Expression Evaluator ── */
+
+function evaluateMathExpression(expr: string): number | null {
+  const s = expr.replace(/\s/g, '')
+  if (!s) return null
+  // Only allow digits, operators, parentheses, and decimal points
+  if (!/^[\d+\-*/().]+$/.test(s)) return null
+  try {
+    const result = Function(`"use strict"; return (${s})`)()
+    if (typeof result !== 'number' || !isFinite(result)) return null
+    return result
+  } catch {
+    return null
+  }
+}
+
+/* ── Cell Selection Context (for Formula Bar) ── */
+
+interface CellSelectionContextType {
+  activeCellKey: string | null
+  activeCellExpression: string
+  isEditing: boolean
+  setActiveCell: (key: string, expression: string) => void
+  setExpression: (expr: string) => void
+  setEditing: (editing: boolean) => void
+  clearCellSelection: () => void
+}
+
+const CellSelectionContext = createContext<CellSelectionContextType>({
+  activeCellKey: null,
+  activeCellExpression: '',
+  isEditing: false,
+  setActiveCell: () => {},
+  setExpression: () => {},
+  setEditing: () => {},
+  clearCellSelection: () => {},
+})
+
+function CellSelectionProvider({ children }: { children: ReactNode }) {
+  const [activeCellKey, setActiveCellKey] = useState<string | null>(null)
+  const [activeCellExpression, setActiveCellExpression] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
+
+  const setActiveCell = useCallback((key: string, expression: string) => {
+    setActiveCellKey(key)
+    setActiveCellExpression(expression)
+  }, [])
+
+  const setExpression = useCallback((expr: string) => {
+    setActiveCellExpression(expr)
+  }, [])
+
+  const setEditing = useCallback((editing: boolean) => {
+    setIsEditing(editing)
+  }, [])
+
+  const clearCellSelection = useCallback(() => {
+    setActiveCellKey(null)
+    setActiveCellExpression('')
+    setIsEditing(false)
+  }, [])
+
+  return (
+    <CellSelectionContext.Provider value={{
+      activeCellKey, activeCellExpression, isEditing,
+      setActiveCell, setExpression, setEditing, clearCellSelection
+    }}>
+      {children}
+    </CellSelectionContext.Provider>
+  )
+}
+
+function useCellSelection() {
+  return useContext(CellSelectionContext)
+}
 
 /* ── Theme ── */
 
@@ -134,11 +210,7 @@ function UpdateGate({ children }: { children: ReactNode }) {
   return (
     <div className="update-gate">
       <div className="ug-card">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="3" width="20" height="14" rx="2" />
-          <line x1="8" y1="21" x2="16" y2="21" />
-          <line x1="12" y1="17" x2="12" y2="21" />
-        </svg>
+        <img src="/logo.png" alt="FinTrack" className="ug-logo" />
         <h1>FinTrack</h1>
 
         {status === 'checking' && (
@@ -216,11 +288,7 @@ function TitleBar() {
     <div className="titlebar">
       <div className="titlebar-drag">
         <div className="titlebar-logo">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00d4aa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
+          <img src="/logo.png" alt="FinTrack" className="titlebar-logo-img" />
           <span>FinTrack</span>
         </div>
       </div>
@@ -355,7 +423,6 @@ function SummaryCards() {
     { label: 'Opening Balance', value: currentData.openingBalance, icon: 'wallet', color: '#4a90d9' },
     { label: 'Extra Gains', value: currentData.extraGainsTotal, icon: 'gift', color: '#f59e0b' },
     { label: 'Total Spent', value: totalSpent, icon: 'spent', color: '#ef4444' },
-    { label: 'Money Left', value: moneyLeft, icon: 'left', color: moneyLeft >= 0 ? '#00d4aa' : '#ef4444' },
   ]
 
   return (
@@ -439,8 +506,12 @@ function EditableNumber({ value, onChange, readonly = false }: {
 
   const handleFinish = () => {
     setEditing(false)
-    const parsed = parseFloat(text)
-    if (!isNaN(parsed) && parsed !== value) {
+    // Try math expression first
+    let parsed: number | null = evaluateMathExpression(text)
+    if (parsed === null) {
+      parsed = parseFloat(text)
+    }
+    if (parsed !== null && !isNaN(parsed) && parsed !== value) {
       onChange(parsed)
     }
   }
@@ -454,13 +525,15 @@ function EditableNumber({ value, onChange, readonly = false }: {
     return (
       <input
         ref={inputRef}
-        type="number"
-        step="0.01"
+        type="text"
         className="editable-input"
         value={text}
         onChange={e => setText(e.target.value)}
         onBlur={handleFinish}
         onKeyDown={handleKeyDown}
+        inputMode="decimal"
+        autoComplete="off"
+        spellCheck={false}
       />
     )
   }
@@ -472,16 +545,26 @@ function EditableNumber({ value, onChange, readonly = false }: {
   )
 }
 
-function EditableCell({ value, onChange }: {
-  value: number; onChange: (v: number) => void
+function EditableCell({ value, onChange, cellKey }: {
+  value: number; onChange: (v: number) => void; cellKey: string
 }) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const { setActiveCell, setExpression, setEditing: setCellEditing } = useCellSelection()
+
+  // Store the raw expression if entered as a math expression
+  const expressionRef = useRef('')
 
   const handleStart = () => {
-    setText(value === 0 ? '' : String(value))
+    const displayText = value === 0 ? '' : String(value)
+    // Restore raw expression if it was previously entered — show that in the input
+    const saved = expressionRef.current || displayText
+    setText(saved)
     setEditing(true)
+    setActiveCell(cellKey, saved)
+    setCellEditing(true)
+    setExpression(saved)
   }
 
   useEffect(() => {
@@ -493,15 +576,48 @@ function EditableCell({ value, onChange }: {
 
   const handleFinish = () => {
     setEditing(false)
-    const parsed = parseFloat(text)
-    if (!isNaN(parsed) && parsed !== value) {
+    setCellEditing(false)
+    
+    if (text === '') {
+      if (value !== 0) onChange(0)
+      expressionRef.current = ''
+      // Update context to show cleared value
+      setActiveCell(cellKey, '0')
+      return
+    }
+
+    // Try to evaluate as math expression first
+    let parsed: number | null = evaluateMathExpression(text)
+    
+    // If that fails, try as a plain number
+    if (parsed === null) {
+      parsed = parseFloat(text)
+    }
+    
+    if (parsed !== null && !isNaN(parsed) && parsed !== value) {
+      // If the text was a math expression, store it
+      if (/[+\-*/]/.test(text)) {
+        expressionRef.current = text
+      } else {
+        expressionRef.current = ''
+      }
       onChange(parsed)
     }
+
+    // After editing, update context to show the expression or formatted result
+    const displayText = expressionRef.current || (parsed !== null && !isNaN(parsed) ? formatCurrency(parsed) : '')
+    setActiveCell(cellKey, displayText)
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setText(val)
+    setExpression(val)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') inputRef.current?.blur()
-    if (e.key === 'Escape') { setEditing(false); setText('') }
+    if (e.key === 'Escape') { setEditing(false); setText(''); setCellEditing(false) }
     if (e.key === 'Tab') { inputRef.current?.blur() }
   }
 
@@ -509,19 +625,22 @@ function EditableCell({ value, onChange }: {
     return (
       <input
         ref={inputRef}
-        type="number"
-        step="0.01"
-        className="cell-input"
+        type="text"
+        className="cell-input cell-input-expr"
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={handleChange}
         onBlur={handleFinish}
         onKeyDown={handleKeyDown}
+        inputMode="decimal"
+        autoComplete="off"
+        spellCheck={false}
       />
     )
   }
 
   return (
-    <span className={`cell-value ${value !== 0 ? 'has-value' : ''}`} onClick={handleStart}>
+    <span className={`cell-value ${value !== 0 ? 'has-value' : ''}`}
+      onClick={handleStart}>
       {value !== 0 ? formatCurrency(value) : '—'}
     </span>
   )
@@ -536,8 +655,6 @@ function ExtraGainsEditor({ total, log, dispatch }: {
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const hasHistory = log.length > 0
-
   const handleStart = () => {
     setText('')
     setAdding(true)
@@ -550,17 +667,16 @@ function ExtraGainsEditor({ total, log, dispatch }: {
   }, [adding])
 
   const handleAdd = () => {
-    const parsed = parseFloat(text)
-    if (!isNaN(parsed) && parsed > 0) {
+    // Try math expression first
+    let parsed: number | null = evaluateMathExpression(text)
+    if (parsed === null) {
+      parsed = parseFloat(text)
+    }
+    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
       dispatch({ type: 'ADD_EXTRA_GAIN', payload: parsed })
     }
     setAdding(false)
     setText('')
-  }
-
-  const handleUndo = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    dispatch({ type: 'UNDO_EXTRA_GAIN' })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -573,34 +689,55 @@ function ExtraGainsEditor({ total, log, dispatch }: {
       {adding ? (
         <input
           ref={inputRef}
-          type="number"
-          step="0.01"
+          type="text"
           className="editable-input eg-input"
           value={text}
           placeholder="Add amount..."
           onChange={e => setText(e.target.value)}
           onBlur={handleAdd}
           onKeyDown={handleKeyDown}
+          inputMode="decimal"
+          autoComplete="off"
+          spellCheck={false}
         />
       ) : (
-        <>
-          <span className="editable-value">{formatCurrency(total)}</span>
-          {hasHistory && (
-            <button className="eg-undo" onClick={handleUndo} title="Undo last extra gain">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
-            </button>
-          )}
-        </>
+        <span className="editable-value">{formatCurrency(total)}</span>
       )}
     </div>
   )
 }
 
+/* ── Formula Bar ── */
+
+function FormulaBar() {
+  const { activeCellKey, activeCellExpression, isEditing } = useCellSelection()
+
+  if (!activeCellKey) {
+    return (
+      <div className="formula-bar formula-bar-idle">
+        <span className="fb-prefix">fx</span>
+        <span className="fb-placeholder">Select a cell to view or edit its content</span>
+      </div>
+    )
+  }
+
+  const idx = activeCellKey.indexOf('-')
+  const dayNum = activeCellKey.slice(0, idx)
+  const catName = activeCellKey.slice(idx + 1)
+  const cellRef = `Day ${dayNum} — ${catName}`
+
+  return (
+    <div className={`formula-bar ${isEditing ? 'formula-bar-active' : ''}`}>
+      <span className="fb-prefix">fx</span>
+      <span className="fb-cell-ref" title={cellRef}>{cellRef}</span>
+      <span className="fb-expression">{activeCellExpression || '—'}</span>
+    </div>
+  )
+}
+
+
 function CategoriesManager({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
-  const { state, dispatch } = useFinance()
+  const { state, dispatch, currentData } = useFinance()
   const [newCat, setNewCat] = useState('')
   const [editingCat, setEditingCat] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
@@ -665,28 +802,52 @@ function CategoriesManager({ onToast }: { onToast: (msg: string, type: 'success'
         </div>
       </div>
       <div className="cm-list">
-        {state.categories.map(cat => (
-          <div key={cat} className="cm-item">
-            {editingCat === cat ? (
-              <input
-                type="text"
-                className="cm-edit-input"
-                value={editText}
-                onChange={e => setEditText(e.target.value)}
-                onBlur={() => handleRename(cat)}
-                onKeyDown={e => { if (e.key === 'Enter') handleRename(cat); if (e.key === 'Escape') setEditingCat(null) }}
-                autoFocus
-              />
-            ) : (
-              <span className="cm-name" onDoubleClick={() => { setEditingCat(cat); setEditText(cat) }}>{cat}</span>
-            )}
-            <button className="cm-remove" onClick={() => handleRemove(cat)} title="Remove category">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-        ))}
+        {state.categories.map(cat => {
+          const hasSep = currentData.columnSeparators.includes(cat)
+          const hasHl = currentData.highlightedColumns.includes(cat)
+          return (
+            <div key={cat} className={`cm-item ${hasSep ? 'cm-item-sep' : ''} ${hasHl ? 'cm-item-hl' : ''}`}>
+              {editingCat === cat ? (
+                <input
+                  type="text"
+                  className="cm-edit-input"
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  onBlur={() => handleRename(cat)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleRename(cat); if (e.key === 'Escape') setEditingCat(null) }}
+                  autoFocus
+                />
+              ) : (
+                <span className="cm-name" onDoubleClick={() => { setEditingCat(cat); setEditText(cat) }}>{cat}</span>
+              )}
+              <div className="cm-actions">
+                <button
+                  className={`cm-marker ${hasSep ? 'cm-marker-on' : ''}`}
+                  onClick={() => dispatch({ type: 'TOGGLE_COLUMN_SEPARATOR', payload: cat })}
+                  title={hasSep ? 'Remove separator after this column' : 'Add separator after this column'}
+                >
+                  <svg width="10" height="14" viewBox="0 0 4 14">
+                    <line x1="2" y1="1" x2="2" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <button
+                  className={`cm-marker ${hasHl ? 'cm-marker-hl' : ''}`}
+                  onClick={() => dispatch({ type: 'TOGGLE_COLUMN_HIGHLIGHT', payload: cat })}
+                  title={hasHl ? 'Remove highlight from this column' : 'Highlight this column'}
+                >
+                  <svg width="10" height="14" viewBox="0 0 12 14">
+                    <rect x="1" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                  </svg>
+                </button>
+                <button className="cm-remove" onClick={() => handleRemove(cat)} title="Remove category">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -696,6 +857,21 @@ function FinanceTable() {
   const { state, dispatch, categoryTotals, dailyTotals, totalSpent, currentData } = useFinance()
   const days = getDaysInMonth(state.selectedMonth)
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const tableRef = useRef<HTMLDivElement>(null)
+  const { clearCellSelection } = useCellSelection()
+
+  // Deselect cell when clicking outside the table
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const isCell = target.closest('.td-cell, .cell-input, .th-cat, .td-total, .cell-value')
+      if (!isCell && tableRef.current) {
+        clearCellSelection()
+      }
+    }
+    document.addEventListener('click', handleDocumentClick)
+    return () => document.removeEventListener('click', handleDocumentClick)
+  }, [clearCellSelection])
 
   const getDayName = (d: number) => {
     const [y, m] = state.selectedMonth.split('-').map(Number)
@@ -713,16 +889,19 @@ function FinanceTable() {
   }
 
   return (
-    <div className="table-container">
+    <div className="table-container" ref={tableRef}>
       <div className="table-wrapper">
         <table className="finance-table">
           <thead>
             <tr>
               <th className="th-date">Date</th>
               <th className="th-day">Day</th>
-              {state.categories.map(cat => (
-                <th key={cat} className="th-cat">{cat}</th>
-              ))}
+              {state.categories.map(cat => {
+                const classes = ['th-cat']
+                if (currentData.columnSeparators.includes(cat)) classes.push('th-cat-sep')
+                if (currentData.highlightedColumns.includes(cat)) classes.push('th-cat-hl')
+                return <th key={cat} className={classes.join(' ')}>{cat}</th>
+              })}
               <th className="th-total">Daily Total</th>
             </tr>
           </thead>
@@ -739,14 +918,20 @@ function FinanceTable() {
                 <tr key={d} className={`${weekend ? 'row-weekend' : ''} ${isToday ? 'row-today' : ''}`}>
                   <td className="td-date">{String(d).padStart(2, '0')}</td>
                   <td className="td-day">{getDayName(d)}</td>
-                  {state.categories.map(cat => (
-                    <td key={cat} className="td-cell">
-                      <EditableCell
-                        value={dayData[cat] || 0}
-                        onChange={v => handleCellChange(d, cat, v)}
-                      />
-                    </td>
-                  ))}
+                  {state.categories.map(cat => {
+                    const tdClasses = ['td-cell']
+                    if (currentData.columnSeparators.includes(cat)) tdClasses.push('td-cell-sep')
+                    if (currentData.highlightedColumns.includes(cat)) tdClasses.push('td-cell-hl')
+                    return (
+                      <td key={cat} className={tdClasses.join(' ')}>
+                        <EditableCell
+                          cellKey={`${d}-${cat}`}
+                          value={dayData[cat] || 0}
+                          onChange={v => handleCellChange(d, cat, v)}
+                        />
+                      </td>
+                    )
+                  })}
                   <td className="td-total">{formatCurrency(dailyTotals[dayKey] || 0)}</td>
                 </tr>
               )
@@ -759,8 +944,12 @@ function FinanceTable() {
                 const total = categoryTotals[cat] || 0
                 const budget = currentData.budgets[cat]
                 const overBudget = budget && total > budget
+                const tdClasses = ['td-cell']
+                if (currentData.columnSeparators.includes(cat)) tdClasses.push('td-cell-sep')
+                if (currentData.highlightedColumns.includes(cat)) tdClasses.push('td-cell-hl')
+                if (overBudget) tdClasses.push('cell-over-budget')
                 return (
-                  <td key={cat} className={`td-cell ${overBudget ? 'cell-over-budget' : ''}`}>
+                  <td key={cat} className={tdClasses.join(' ')}>
                     {formatCurrency(total)}
                   </td>
                 )
@@ -1033,6 +1222,39 @@ function UserSection({ onToast }: { onToast: (msg: string, type: 'success' | 'er
 
 function CashReconciliation() {
   const { state, dispatch, moneyLeft, difference, currentData } = useFinance()
+  const [cashText, setCashText] = useState('')
+  const [focusing, setFocusing] = useState(false)
+  const cashInputRef = useRef<HTMLInputElement>(null)
+
+  const handleCashStart = () => {
+    setCashText(currentData.cashInHand === 0 ? '' : String(currentData.cashInHand))
+    setFocusing(true)
+  }
+
+  useEffect(() => {
+    if (focusing && cashInputRef.current) {
+      cashInputRef.current.focus()
+      cashInputRef.current.select()
+      setFocusing(false)
+    }
+  }, [focusing])
+
+  const handleCashFinish = () => {
+    // Try math expression first
+    let parsed: number | null = evaluateMathExpression(cashText)
+    if (parsed === null) {
+      parsed = parseFloat(cashText)
+    }
+    const val = (parsed !== null && !isNaN(parsed)) ? parsed : 0
+    if (val !== currentData.cashInHand) {
+      dispatch({ type: 'SET_CASH_IN_HAND', payload: val })
+    }
+  }
+
+  const handleCashKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') cashInputRef.current?.blur()
+    if (e.key === 'Escape') { setCashText(''); cashInputRef.current?.blur() }
+  }
 
   return (
     <div className="reconciliation-section">
@@ -1044,14 +1266,24 @@ function CashReconciliation() {
         </div>
         <div className="rec-field">
           <label>Cash in Hand (Actual)</label>
-          <input
-            type="number"
-            step="0.01"
-            className="rec-input"
-            value={currentData.cashInHand || ''}
-            onChange={e => dispatch({ type: 'SET_CASH_IN_HAND', payload: parseFloat(e.target.value) || 0 })}
-            placeholder="$0"
-          />
+          {focusing || cashInputRef.current === document.activeElement ? (
+            <input
+              ref={cashInputRef}
+              type="text"
+              className="rec-input"
+              value={cashText}
+              onChange={e => setCashText(e.target.value)}
+              onBlur={handleCashFinish}
+              onKeyDown={handleCashKeyDown}
+              inputMode="decimal"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          ) : (
+            <span className="rec-value rec-clickable" onClick={handleCashStart}>
+              {formatCurrency(currentData.cashInHand)}
+            </span>
+          )}
         </div>
         <div className={`rec-diff ${Math.abs(difference) > 0.01 ? (difference > 0 ? 'diff-positive' : 'diff-negative') : 'diff-zero'}`}>
           <label>Difference</label>
@@ -1104,31 +1336,30 @@ function MainHeader() {
 
 function AppLayout({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00d4aa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
-          <div>
-            <span className="sidebar-title">FinTrack</span>
-            <span className="sidebar-sub">Finance Tracker</span>
+    <CellSelectionProvider>
+      <div className="app">
+        <aside className="sidebar">
+          <div className="sidebar-header">
+            <img src="/logo.png" alt="FinTrack" className="sidebar-logo" />
+            <div>
+              <span className="sidebar-title">FinTrack</span>
+              <span className="sidebar-sub">Finance Tracker</span>
+            </div>
           </div>
-        </div>
-        <MonthSidebarList />
-        <SavingsGoal />
-        <UserSection onToast={onToast} />
-      </aside>
-      <main className="main-content">
-        <MainHeader />
-        <SummaryCards />
-        <CategoriesManager onToast={onToast} />
-        <FinanceTable />
-        <CashReconciliation />
-      </main>
-    </div>
+          <MonthSidebarList />
+          <SavingsGoal />
+          <UserSection onToast={onToast} />
+        </aside>
+        <main className="main-content">
+          <MainHeader />
+          <SummaryCards />
+          <CashReconciliation />
+          <FormulaBar />
+          <CategoriesManager onToast={onToast} />
+          <FinanceTable />
+        </main>
+      </div>
+    </CellSelectionProvider>
   )
 }
 
@@ -1206,11 +1437,7 @@ function AuthGate({ children }: { children: ReactNode }) {
         <TitleBar />
         <div className="auth-landing">
           <div className="auth-landing-content">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00d4aa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
-            </svg>
+            <img src="/logo.png" alt="FinTrack" className="auth-landing-logo" />
             <h1>FinTrack</h1>
             <p className="auth-landing-sub">Professional Finance Tracker</p>
             {showAuth ? (

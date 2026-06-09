@@ -82,6 +82,8 @@ function migrateState(state: any): FinanceState {
       budgets: old.budgets || {},
       savingsTarget: old.savingsTarget || 0,
       savingsCurrent: old.savingsCurrent || 0,
+      columnSeparators: old.columnSeparators || [],
+      highlightedColumns: old.highlightedColumns || [],
     }
 
     return {
@@ -94,12 +96,11 @@ function migrateState(state: any): FinanceState {
   // New format: just ensure current month exists and entries are migrated
   const months = { ...state.months }
   const currentMonth = state.selectedMonth
-  if (!months[currentMonth]) {
-    months[currentMonth] = createEmptyMonth()
-  }
+  // Spread createEmptyMonth() first to fill any missing fields (e.g. after adding new features)
   months[currentMonth] = {
-    ...months[currentMonth],
-    entries: migrateMonthEntries(months[currentMonth].entries || {}, state.categories, currentMonth),
+    ...createEmptyMonth(),
+    ...(months[currentMonth] || {}),
+    entries: migrateMonthEntries((months[currentMonth]?.entries || {}), state.categories, currentMonth),
   }
 
   return { ...state, months }
@@ -255,6 +256,22 @@ function financeReducer(state: FinanceState, action: FinanceAction): FinanceStat
       return setCurrentMonthData(state, { savingsTarget: action.payload })
     case 'SET_SAVINGS_CURRENT':
       return setCurrentMonthData(state, { savingsCurrent: action.payload })
+    case 'TOGGLE_COLUMN_SEPARATOR': {
+      const cat = action.payload
+      const data = getCurrentMonthData(state)
+      const list = data.columnSeparators.includes(cat)
+        ? data.columnSeparators.filter(c => c !== cat)
+        : [...data.columnSeparators, cat]
+      return setCurrentMonthData(state, { columnSeparators: list })
+    }
+    case 'TOGGLE_COLUMN_HIGHLIGHT': {
+      const cat = action.payload
+      const data = getCurrentMonthData(state)
+      const list = data.highlightedColumns.includes(cat)
+        ? data.highlightedColumns.filter(c => c !== cat)
+        : [...data.highlightedColumns, cat]
+      return setCurrentMonthData(state, { highlightedColumns: list })
+    }
     case 'LOAD_STATE':
       return migrateState(action.payload)
     default:
